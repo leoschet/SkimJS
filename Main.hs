@@ -22,6 +22,9 @@ evalExpr env (AssignExpr OpAssign (LVar var) expr) = do
     stateLookup env var -- crashes if the variable doesn't exist
     e <- evalExpr env expr
     setVar var e
+-------------------------------------------------------------------------------------
+evalExpr env (StringLit str) = return $ String str
+-------------------------------------------------------------------------------------
 
 evalStmt :: StateT -> Statement -> StateTransformer Value
 evalStmt env EmptyStmt = return Nil
@@ -29,6 +32,55 @@ evalStmt env (VarDeclStmt []) = return Nil
 evalStmt env (VarDeclStmt (decl:ds)) =
     varDecl env decl >> evalStmt env (VarDeclStmt ds)
 evalStmt env (ExprStmt expr) = evalExpr env expr
+-------------------------------------------------------------------------------------
+-- LOOPS
+-- TODO: modularizar os for's
+-- TODO: implementar comandos break e continue
+-- do while
+evalStmt env (DoWhileStmt stmt expr) = do
+    evalStmt env stmt
+    Bool v <- evalExpr env expr
+    if v then
+        evalStmt env (DoWhileStmt stmt expr)
+    else
+        return Nil
+-- while
+evalStmt env (WhileStmt expr stmt) = do
+    Bool v <- evalExpr env expr
+    if v then do
+        evalStmt env stmt
+        evalStmt env (WhileStmt expr stmt)
+    else
+        return Nil
+-- for
+evalStmt env (ForStmt NoInit test incr stmt) = do
+    case test of
+        Nothing -> do
+            -- loop
+            evalStmt env stmt
+            evalStmt env (ForStmt NoInit test incr stmt)
+        Just testExpr -> do
+            -- testa condicao
+            Bool b <- evalExpr env testExpr
+            if b then do
+                evalStmt env stmt 
+
+                case incr of 
+                    Nothing -> return Nil
+                    Just incrExpr -> do
+                        -- incrementa
+                        evalExpr env incrExpr
+                        -- loop
+                        evalStmt env (ForStmt NoInit test incr stmt)
+            else 
+                return Nil
+-------------------------------------------------------------------------------------
+-- block
+evalStmt env (BlockStmt []) = return Nil
+evalStmt env (BlockStmt (stmt:stmts)) = do
+    evalStmt env stmt
+    evalStmt env (BlockStmt stmts)
+-------------------------------------------------------------------------------------
 
 -- Do not touch this one :)
 evaluate :: StateT -> [Statement] -> StateTransformer Value
@@ -54,6 +106,9 @@ infixOp env OpEq   (Bool v1) (Bool v2) = return $ Bool $ v1 == v2
 infixOp env OpNEq  (Bool v1) (Bool v2) = return $ Bool $ v1 /= v2
 infixOp env OpLAnd (Bool v1) (Bool v2) = return $ Bool $ v1 && v2
 infixOp env OpLOr  (Bool v1) (Bool v2) = return $ Bool $ v1 || v2
+-------------------------------------------------------------------------------------
+infixOp env OpAdd  (String  v1) (String  v2) = return $ String  $ v1 ++ v2
+-------------------------------------------------------------------------------------
 
 --
 -- Environment and auxiliary functions
