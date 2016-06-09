@@ -75,11 +75,30 @@ evalStmt env (ForStmt NoInit test incr stmt) = do
             else 
                 return Nil
 -------------------------------------------------------------------------------------
--- block
+-- BLOCK
 evalStmt env (BlockStmt []) = return Nil
 evalStmt env (BlockStmt (stmt:stmts)) = do
     evalStmt env stmt
     evalStmt env (BlockStmt stmts)
+-------------------------------------------------------------------------------------
+-- IF
+-- single if
+evalStmt env (IfSingleStmt expr stmt) = do
+    Bool b <- evalExpr env expr
+    if b then do
+        a <- evalStmt env stmt
+        return a
+    else 
+        return Nil
+-- if else
+evalStmt env (IfStmt expr ifStmt elseStmt) = do
+    Bool b <- evalExpr env expr
+    if b then do
+        a <- evalStmt env ifStmt
+        return a
+    else do
+        a <- evalStmt env elseStmt
+        return a
 -------------------------------------------------------------------------------------
 
 -- Do not touch this one :)
