@@ -5,6 +5,7 @@ import Control.Applicative
 import Data.Map as Map (Map, insert, lookup, union, toList, empty)
 import Debug.Trace
 import Value
+import Data.Bits
 
 --
 -- Evaluate functions
@@ -18,10 +19,13 @@ evalExpr env (InfixExpr op expr1 expr2) = do
     v1 <- evalExpr env expr1
     v2 <- evalExpr env expr2
     infixOp env op v1 v2
-evalExpr env (AssignExpr OpAssign (LVar var) expr) = do
-    stateLookup env var -- crashes if the variable doesn't exist
+evalExpr env (AssignExpr op (LVar var) expr) = do
+    v <- stateLookup env var -- crashes if the variable doesn't exist
     e <- evalExpr env expr
-    setVar var e
+
+    case op of
+        OpAssign -> setVar var e -- TODO: implement global var scope
+        _ -> assignOp env op v e
 -------------------------------------------------------------------------------------
 evalExpr env (StringLit str) = return $ String str
 -------------------------------------------------------------------------------------
@@ -34,8 +38,7 @@ evalStmt env (VarDeclStmt (decl:ds)) =
 evalStmt env (ExprStmt expr) = evalExpr env expr
 -------------------------------------------------------------------------------------
 -- LOOPS
--- TODO: modularizar os for's
--- TODO: implementar comandos break e continue
+-- TODO: implementar comando de continue
 -- do while
 evalStmt env (DoWhileStmt stmt expr) = do
     v <- evalStmt env stmt
@@ -147,6 +150,27 @@ infixOp env OpLOr  (Bool v1) (Bool v2) = return $ Bool $ v1 || v2
 -------------------------------------------------------------------------------------
 infixOp env OpAdd  (String  v1) (String  v2) = return $ String  $ v1 ++ v2
 -------------------------------------------------------------------------------------
+infixOp env OpLShift (Int v1) (Int v2) = return $ Int $ shiftL v1 v2
+infixOp env OpSpRShift  (Int  v1) (Int  v2) = return $ Int $ shiftR v1 v2
+infixOp env OpZfRShift  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+-------------------------------------------------------------------------------------
+infixOp env OpBAnd  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+infixOp env OpBXor  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+infixOp env OpBOr  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+-------------------------------------------------------------------------------------
+
+assignOp :: StateT -> AssignOp -> Value -> Value -> StateTransformer Value
+assignOp env OpAssignAdd v1 v2 = infixOp env OpAdd v1 v2
+assignOp env OpAssignSub v1 v2 = infixOp env OpSub v1 v2
+assignOp env OpAssignMul v1 v2 = infixOp env OpMul v1 v2
+assignOp env OpAssignDiv v1 v2 = infixOp env OpDiv v1 v2
+assignOp env OpAssignMod v1 v2 = infixOp env OpMod v1 v2
+assignOp env OpAssignLShift v1 v2 = infixOp env OpLShift v1 v2
+assignOp env OpAssignSpRShift v1 v2 = infixOp env OpSpRShift v1 v2
+assignOp env OpAssignZfRShift v1 v2 = infixOp env OpZfRShift v1 v2
+assignOp env OpAssignBAnd v1 v2 = infixOp env OpBAnd v1 v2
+assignOp env OpAssignBXor v1 v2 = infixOp env OpBXor v1 v2
+assignOp env OpAssignBOr v1 v2 = infixOp env OpBOr v1 v2
 
 --
 -- Environment and auxiliary functions
