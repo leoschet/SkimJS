@@ -53,14 +53,17 @@ evalStmt env (WhileStmt expr stmt) = do
     else
         return Nil
 -- for
-evalStmt env (ForStmt NoInit test incr stmt) = do
+evalStmt env (ForStmt init test incr stmt) = do
+    case init of
+        NoInit -> return Nil
+        VarInit vars -> evalStmt env (VarDeclStmt vars)
+        ExprInit expr -> evalExpr env expr
     case test of
         Nothing -> do
-            -- loop
+            -- loop infinito
             evalStmt env stmt
             evalStmt env (ForStmt NoInit test incr stmt)
         Just testExpr -> do
-            -- testa condicao
             Bool b <- evalExpr env testExpr
             if b then do
                 evalStmt env stmt 
