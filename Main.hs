@@ -38,48 +38,64 @@ evalStmt env (ExprStmt expr) = evalExpr env expr
 -- TODO: implementar comandos break e continue
 -- do while
 evalStmt env (DoWhileStmt stmt expr) = do
-    evalStmt env stmt
-    Bool v <- evalExpr env expr
-    if v then
-        evalStmt env (DoWhileStmt stmt expr)
-    else
-        return Nil
+    v <- evalStmt env stmt
+    Bool b <- evalExpr env expr
+
+    case v of
+        Break -> return Break
+        _ -> if b then evalStmt env (DoWhileStmt stmt expr) else return Nil
 -- while
 evalStmt env (WhileStmt expr stmt) = do
-    Bool v <- evalExpr env expr
-    if v then do
-        evalStmt env stmt
-        evalStmt env (WhileStmt expr stmt)
+    Bool b <- evalExpr env expr
+    if b then do
+        v <- evalStmt env stmt
+        case v of
+            Break -> return Break
+            _ -> evalStmt env (WhileStmt expr stmt)
     else
         return Nil
 -- for
-evalStmt env (ForStmt NoInit test incr stmt) = do
+evalStmt env (ForStmt init test incr stmt) = do
+    case init of
+        NoInit -> return Nil
+        VarInit vars -> evalStmt env (VarDeclStmt vars)
+        ExprInit expr -> evalExpr env expr
     case test of
         Nothing -> do
-            -- loop
-            evalStmt env stmt
-            evalStmt env (ForStmt NoInit test incr stmt)
+            -- loop infinito
+            v <- evalStmt env stmt
+            case v of
+                Break -> return Break
+                _ -> evalStmt env (ForStmt NoInit test incr stmt)
+
         Just testExpr -> do
             -- testa condicao
             Bool b <- evalExpr env testExpr
             if b then do
-                evalStmt env stmt 
+                -- roda statement
+                v <- evalStmt env stmt
 
-                case incr of 
-                    Nothing -> return Nil
-                    Just incrExpr -> do
-                        -- incrementa
-                        evalExpr env incrExpr
-                        -- loop
-                        evalStmt env (ForStmt NoInit test incr stmt)
+                case v of
+                    Break -> return Break
+                    _ -> do
+                        -- incrementa contador
+                        case incr of 
+                            Nothing -> return Nil
+                            Just incrExpr -> do
+                                -- incrementa
+                                evalExpr env incrExpr
+                                -- loop
+                                evalStmt env (ForStmt NoInit test incr stmt)
             else 
                 return Nil
 -------------------------------------------------------------------------------------
 -- BLOCK
 evalStmt env (BlockStmt []) = return Nil
 evalStmt env (BlockStmt (stmt:stmts)) = do
-    evalStmt env stmt
-    evalStmt env (BlockStmt stmts)
+    v <- evalStmt env stmt
+    case v of
+        Break -> return Break
+        _ -> evalStmt env (BlockStmt stmts)
 -------------------------------------------------------------------------------------
 -- IF
 -- single if
@@ -99,6 +115,9 @@ evalStmt env (IfStmt expr ifStmt elseStmt) = do
     else do
         a <- evalStmt env elseStmt
         return a
+-------------------------------------------------------------------------------------
+-- BREAK
+evalStmt env (BreakStmt m) = return Break
 -------------------------------------------------------------------------------------
 
 -- Do not touch this one :)
