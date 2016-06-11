@@ -7,6 +7,8 @@ data Value = Bool Bool
 -----------------------------------
     | Break
 -----------------------------------
+    | Array [Value]
+----------------------------------
     | Nil
 
 --
@@ -22,6 +24,7 @@ instance Show Value where
 -----------------------------------
   show Break = "break"
 -----------------------------------
+  show (Array array) = show array
   show Nil = "undefined"
   
 -- This function could be replaced by (unwords.map show). The unwords

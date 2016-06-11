@@ -25,6 +25,15 @@ evalExpr env (AssignExpr OpAssign (LVar var) expr) = do
 -------------------------------------------------------------------------------------
 evalExpr env (StringLit str) = return $ String str
 -------------------------------------------------------------------------------------
+--Array
+
+evalExpr env (ArrayLit []) = return $ Array []
+evalExpr env (ArrayLit (x:xs)) = do
+    a <- evalExpr env x
+    (Array b) <- evalExpr env (ArrayLit xs)
+    return $ Array ([a] ++ b)
+    
+-----------------------------------------------------------------------------------
 
 evalStmt :: StateT -> Statement -> StateTransformer Value
 evalStmt env EmptyStmt = return Nil
