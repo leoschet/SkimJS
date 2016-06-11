@@ -32,7 +32,17 @@ evalExpr env (ArrayLit (x:xs)) = do
     a <- evalExpr env x
     (Array b) <- evalExpr env (ArrayLit xs)
     return $ Array ([a] ++ b)
-    
+
+evalExpr env (CallExpr (VarRef (Id name)) (x:xs) ) = do
+    p <- evalExpr env x
+    case name of
+        "head" -> case p of 
+            (Array [])-> return $ Array []
+            (Array (x:xs)) -> return x 
+        "tail" -> case p of
+            (Array [])-> return $ Array []
+            (Array (x:xs)) -> return $ Array xs
+
 -----------------------------------------------------------------------------------
 
 evalStmt :: StateT -> Statement -> StateTransformer Value
@@ -181,6 +191,9 @@ varDecl env (VarDecl (Id id) maybeExpr) = do
 
 setVar :: String -> Value -> StateTransformer Value
 setVar var val = ST $ \s -> (val, insert var val s)
+
+stringResult :: Expression -> String
+stringResult ex = show ex
 
 --
 -- Types and boilerplate

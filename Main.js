@@ -1,2 +1,3 @@
-var x = 0, y = 10;
-x + y;
+var l = [1,2,3];
+var hl = head(l);
+var hl = tail(l);
