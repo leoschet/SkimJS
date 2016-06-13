@@ -5,6 +5,7 @@ import Control.Applicative
 import Data.Map as Map (Map, insert, lookup, union, toList, empty)
 import Debug.Trace
 import Value
+import Data.Bits
 
 --
 -- Evaluate functions
@@ -18,10 +19,13 @@ evalExpr env (InfixExpr op expr1 expr2) = do
     v1 <- evalExpr env expr1
     v2 <- evalExpr env expr2
     infixOp env op v1 v2
-evalExpr env (AssignExpr OpAssign (LVar var) expr) = do
-    stateLookup env var -- crashes if the variable doesn't exist
+evalExpr env (AssignExpr op (LVar var) expr) = do
+    v <- stateLookup env var -- crashes if the variable doesn't exist
     e <- evalExpr env expr
-    setVar var e
+
+    case op of
+        OpAssign -> setVar var e -- TODO: implement global var scope
+        _ -> assignOp env op v e
 -------------------------------------------------------------------------------------
 evalExpr env (StringLit str) = return $ String str
 -------------------------------------------------------------------------------------
@@ -33,16 +37,57 @@ evalExpr env (ArrayLit (x:xs)) = do
     (Array b) <- evalExpr env (ArrayLit xs)
     return $ Array ([a] ++ b)
 
-evalExpr env (CallExpr (VarRef (Id name)) (x:xs) ) = do
-    p <- evalExpr env x
+-- global 'static' functions
+evalExpr env (CallExpr name params) = do
+    -- if name isn't a VarRef, it is not a function
     case name of
-        "head" -> case p of 
-            (Array [])-> return $ Array []
-            (Array (x:xs)) -> return x 
-        "tail" -> case p of
-            (Array [])-> return $ Array []
-            (Array (x:xs)) -> return $ Array xs
+        VarRef (Id fName) -> do
+            -- get first param
+            Array vals <- evalExpr env (head params)
+            case fName of
+                "head" ->
+                    -- if null, then the function has only one parameter
+                    -- if not null, it has more 
+                    if (null (tail params)) then
+                        return (head vals)
+                    else
+                        error $ "Too many arguments"
+                "tail" -> 
+                    if (null (tail params)) then
+                        return (Array (tail vals))
+                    else
+                        error $ "Too many arguments"
+                "len" -> 
+                    if (null (tail params)) then
+                        arraySize (Array vals) (Int 0)
+                    else
+                        error $ "Too many arguments"
+                "concat" -> do
+                    -- if null, it has only one parameter
+                    if (null (tail params)) then
+                        error $ "Too few arguments"
+                    else do
+                        Array valsToConcat <- evalExpr env (head (tail params))
+                        -- if null, the function has two parameters
+                        -- if not null, it has more
+                        if (null (tail (tail params))) then
+                            return (Array (vals ++ valsToConcat))
+                        else
+                            error $ "Too many arguments"
+                _ -> error $ show fName ++ " is not a function"
 
+
+-- Access array item using brackets
+evalExpr env (BracketRef expr idExpr) = do
+    obj <- evalExpr env expr
+    case obj of
+        Array array -> do
+            id <- evalExpr env idExpr
+            case id of
+                Int index -> getArrayByIndex env (Array array) (Int index)
+                _ -> error $ "Illegal argument type"
+        -- TODO: implement access to object properties
+        _ -> error $ "Illegal type"
 -----------------------------------------------------------------------------------
 
 evalStmt :: StateT -> Statement -> StateTransformer Value
@@ -53,8 +98,7 @@ evalStmt env (VarDeclStmt (decl:ds)) =
 evalStmt env (ExprStmt expr) = evalExpr env expr
 -------------------------------------------------------------------------------------
 -- LOOPS
--- TODO: modularizar os for's
--- TODO: implementar comandos break e continue
+-- TODO: implementar comando de continue
 -- do while
 evalStmt env (DoWhileStmt stmt expr) = do
     v <- evalStmt env stmt
@@ -166,7 +210,46 @@ infixOp env OpLOr  (Bool v1) (Bool v2) = return $ Bool $ v1 || v2
 -------------------------------------------------------------------------------------
 infixOp env OpAdd  (String  v1) (String  v2) = return $ String  $ v1 ++ v2
 -------------------------------------------------------------------------------------
+infixOp env OpLShift (Int v1) (Int v2) = return $ Int $ shiftL v1 v2
+infixOp env OpSpRShift  (Int  v1) (Int  v2) = return $ Int $ shiftR v1 v2
+infixOp env OpZfRShift  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+-------------------------------------------------------------------------------------
+infixOp env OpBAnd  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+infixOp env OpBXor  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+infixOp env OpBOr  (Int  v1) (Int  v2) = error $ "Operation not implemented"
+-------------------------------------------------------------------------------------
 
+assignOp :: StateT -> AssignOp -> Value -> Value -> StateTransformer Value
+assignOp env OpAssignAdd v1 v2 = infixOp env OpAdd v1 v2
+assignOp env OpAssignSub v1 v2 = infixOp env OpSub v1 v2
+assignOp env OpAssignMul v1 v2 = infixOp env OpMul v1 v2
+assignOp env OpAssignDiv v1 v2 = infixOp env OpDiv v1 v2
+assignOp env OpAssignMod v1 v2 = infixOp env OpMod v1 v2
+assignOp env OpAssignLShift v1 v2 = infixOp env OpLShift v1 v2
+assignOp env OpAssignSpRShift v1 v2 = infixOp env OpSpRShift v1 v2
+assignOp env OpAssignZfRShift v1 v2 = infixOp env OpZfRShift v1 v2
+assignOp env OpAssignBAnd v1 v2 = infixOp env OpBAnd v1 v2
+assignOp env OpAssignBXor v1 v2 = infixOp env OpBXor v1 v2
+assignOp env OpAssignBOr v1 v2 = infixOp env OpBOr v1 v2
+
+--
+-- Array auxiliary functions
+--
+
+getArrayByIndex :: StateT -> Value -> Value -> StateTransformer Value
+getArrayByIndex env (Array []) (Int _) = error $ "Array index out of bounds"
+getArrayByIndex env (Array (x:xs)) (Int index) =
+    if index < 0 then 
+        error $ "Negative index"
+    else 
+        if index == 0 then
+            return x
+        else
+            getArrayByIndex env (Array xs) (Int (index-1))
+
+arraySize :: Value -> Value -> StateTransformer Value
+arraySize (Array []) (Int len) = return $ Int $ len
+arraySize (Array (x:xs)) (Int len) = arraySize (Array xs) (Int (len+1))
 --
 -- Environment and auxiliary functions
 --
