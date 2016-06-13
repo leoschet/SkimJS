@@ -34,3 +34,18 @@ showListContents :: [Value] -> String
 showListContents [] = ""
 showListContents [a] = show a
 showListContents (a:as) = show a ++ ", " ++ (showListContents as)
+
+-- compare the arrays to know if are the same
+
+instance Eq Value where
+   (Int a) == (Int b) = a == b
+   (Array []) == (Array []) = True
+   (Array []) == (Array a) = False
+   (Array a) == (Array []) = False
+   (Array a) == (Array b) = compareArray a b
+
+compareArray [] [] = True
+compareArray (x:xs) (y:ys) | show (x) == show (y) = compareArray xs ys
+                           | otherwise = False
+
+ 

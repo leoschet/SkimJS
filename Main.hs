@@ -88,6 +88,7 @@ evalExpr env (BracketRef expr idExpr) = do
                 _ -> error $ "Illegal argument type"
         -- TODO: implement access to object properties
         _ -> error $ "Illegal type"
+
 -----------------------------------------------------------------------------------
 
 evalStmt :: StateT -> Statement -> StateTransformer Value
@@ -207,6 +208,9 @@ infixOp env OpEq   (Bool v1) (Bool v2) = return $ Bool $ v1 == v2
 infixOp env OpNEq  (Bool v1) (Bool v2) = return $ Bool $ v1 /= v2
 infixOp env OpLAnd (Bool v1) (Bool v2) = return $ Bool $ v1 && v2
 infixOp env OpLOr  (Bool v1) (Bool v2) = return $ Bool $ v1 || v2
+-- compare the arrays to know if are the same
+infixOp env OpEq   (Array v1)(Array v2) = return $ Bool $ v1 == v2
+infixOp env OpNEq  (Array v1)(Array v2) = return $ Bool $ v1 /= v2
 -------------------------------------------------------------------------------------
 infixOp env OpAdd  (String  v1) (String  v2) = return $ String  $ v1 ++ v2
 -------------------------------------------------------------------------------------
@@ -218,6 +222,10 @@ infixOp env OpBAnd  (Int  v1) (Int  v2) = error $ "Operation not implemented"
 infixOp env OpBXor  (Int  v1) (Int  v2) = error $ "Operation not implemented"
 infixOp env OpBOr  (Int  v1) (Int  v2) = error $ "Operation not implemented"
 -------------------------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------------------
 
 assignOp :: StateT -> AssignOp -> Value -> Value -> StateTransformer Value
 assignOp env OpAssignAdd v1 v2 = infixOp env OpAdd v1 v2
@@ -232,8 +240,6 @@ assignOp env OpAssignBAnd v1 v2 = infixOp env OpBAnd v1 v2
 assignOp env OpAssignBXor v1 v2 = infixOp env OpBXor v1 v2
 assignOp env OpAssignBOr v1 v2 = infixOp env OpBOr v1 v2
 
---
--- Array auxiliary functions
 --
 
 getArrayByIndex :: StateT -> Value -> Value -> StateTransformer Value
