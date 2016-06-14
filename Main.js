@@ -1,7 +1,15 @@
-var x = [11, 4, 2, 1, 2, 5];
-var y = ["a", "4", "6", "9"];
+var l = [1,2,3];
+var l1 = [1,3,4];
+var l2 = [];
+var l5 = [1,2];
+var l3 = [1,2,3];
+var hl = head(l);
+var hl = tail(l);
+var t = (l == l1);
+var u = (l == l2);
+var w = (l == l3);
+
 var z = 10;
-head(x);
 /*
 tail(y);
 */
@@ -16,3 +24,5 @@ function auxFunc(number1,  number2) {
 }
 
 auxFunc(4, 1);
+
+//hl;
