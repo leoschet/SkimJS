@@ -53,6 +53,10 @@ showListContents (a:as) = show a ++ ", " ++ (showListContents as)
 
 instance Eq Value where
    (Int a) == (Int b) = a == b
+   (String []) == (String []) = True
+   (String []) == (String a) = False
+   (String a) == (String []) = False
+   (String a) == (String b) = compareArray a b
    (Array []) == (Array []) = True
    (Array []) == (Array a) = False
    (Array a) == (Array []) = False

@@ -101,10 +101,11 @@ evalExpr env (BracketRef expr idExpr) = do
         Array array -> do
             id <- evalExpr env idExpr
             case id of
-                Int index -> getArrayByIndex env (Array array) (Int index)
+                Int index -> getPositionArray env (Array array) (Int index)
                 _ -> error $ "Illegal argument type"
         -- TODO: implement access to object properties
         _ -> error $ "Illegal type"
+
 
 -----------------------------------------------------------------------------------
 
@@ -270,16 +271,16 @@ assignOp env OpAssignBOr v1 v2 = infixOp env OpBOr v1 v2
 
 --
 
-getArrayByIndex :: StateT -> Value -> Value -> StateTransformer Value
-getArrayByIndex env (Array []) (Int _) = error $ "Array index out of bounds"
-getArrayByIndex env (Array (x:xs)) (Int index) =
+getPositionArray :: StateT -> Value -> Value -> StateTransformer Value
+getPositionArray env (Array []) (Int _) = error $ "Array index out of bounds"
+getPositionArray env (Array (x:xs)) (Int index) =
     if index < 0 then 
         error $ "Negative index"
     else 
         if index == 0 then
             return x
         else
-            getArrayByIndex env (Array xs) (Int (index-1))
+            getPositionArray env (Array xs) (Int (index-1))
 
 arraySize :: Value -> Value -> StateTransformer Value
 arraySize (Array []) (Int len) = return $ Int $ len
