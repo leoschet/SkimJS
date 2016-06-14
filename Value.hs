@@ -1,5 +1,8 @@
 module Value (Value (..)) where
 
+-- Importing Syntax to Value Module
+import Language.ECMAScript3.Syntax
+
 data Value = Bool Bool
     | Int Int
     | String String
@@ -10,6 +13,12 @@ data Value = Bool Bool
     | Array [Value]
 ----------------------------------
     | Nil
+----------------------------------
+    | GlobalVar
+    | Function Id [Id] [Statement]
+    | Return Value 
+    | NReturn
+
 
 --
 -- Pretty Printer
@@ -26,10 +35,15 @@ instance Show Value where
 -----------------------------------
   show (Array array) = show array
   show Nil = "undefined"
+  show (Function (Id name) args stmts) = "function " ++ name ++ "(" ++ showArgs args ++")"
   
--- This function could be replaced by (unwords.map show). The unwords
--- function takes a list of String values and uses them to build a 
--- single String where the words are separated by spaces.
+
+-- Args of Functions
+showArgs [] = ""
+showArgs ((Id arg):xs) = show arg ++ showArgsTail xs
+showArgsTail [] = ""
+showArgsTail ((Id arg):xs) = ", " ++ show arg ++ showArgsTail xs
+
 showListContents :: [Value] -> String
 showListContents [] = ""
 showListContents [a] = show a
@@ -39,6 +53,10 @@ showListContents (a:as) = show a ++ ", " ++ (showListContents as)
 
 instance Eq Value where
    (Int a) == (Int b) = a == b
+   (String []) == (String []) = True
+   (String []) == (String a) = False
+   (String a) == (String []) = False
+   (String a) == (String b) = compareArray a b
    (Array []) == (Array []) = True
    (Array []) == (Array a) = False
    (Array a) == (Array []) = False

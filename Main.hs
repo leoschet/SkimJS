@@ -1,7 +1,7 @@
 import qualified Language.ECMAScript3.Parser as Parser
 import Language.ECMAScript3.Syntax
-import Control.Monad
-import Control.Applicative
+import Control.Monad hiding (empty)
+import Control.Applicative hiding (empty)
 import Data.Map as Map (Map, insert, lookup, union, toList, empty)
 import Debug.Trace
 import Value
@@ -24,7 +24,10 @@ evalExpr env (AssignExpr op (LVar var) expr) = do
     e <- evalExpr env expr
 
     case op of
-        OpAssign -> setVar var e -- TODO: implement global var scope
+        OpAssign -> do
+            case v of
+                GlobalVar -> createGlobalVar var e
+                _ -> setVar var e
         _ -> assignOp env op v e
 -------------------------------------------------------------------------------------
 evalExpr env (StringLit str) = return $ String str
@@ -37,44 +40,58 @@ evalExpr env (ArrayLit (x:xs)) = do
     (Array b) <- evalExpr env (ArrayLit xs)
     return $ Array ([a] ++ b)
 
--- global 'static' functions
 evalExpr env (CallExpr name params) = do
-    -- if name isn't a VarRef, it is not a function
-    case name of
-        VarRef (Id fName) -> do
-            -- get first param
-            Array vals <- evalExpr env (head params)
-            case fName of
-                "head" ->
-                    -- if null, then the function has only one parameter
-                    -- if not null, it has more 
-                    if (null (tail params)) then
-                        return (head vals)
-                    else
-                        error $ "Too many arguments"
-                "tail" -> 
-                    if (null (tail params)) then
-                        return (Array (tail vals))
-                    else
-                        error $ "Too many arguments"
-                "len" -> 
-                    if (null (tail params)) then
-                        arraySize (Array vals) (Int 0)
-                    else
-                        error $ "Too many arguments"
-                "concat" -> do
-                    -- if null, it has only one parameter
-                    if (null (tail params)) then
-                        error $ "Too few arguments"
-                    else do
-                        Array valsToConcat <- evalExpr env (head (tail params))
-                        -- if null, the function has two parameters
-                        -- if not null, it has more
-                        if (null (tail (tail params))) then
-                            return (Array (vals ++ valsToConcat))
-                        else
-                            error $ "Too many arguments"
-                _ -> error $ show fName ++ " is not a function"
+    f <- evalExpr env name
+    case f of
+        -- normal functions
+        Function _ args stmts -> do
+            createArgs env args params
+            v <- evalStmt env (BlockStmt stmts)
+            case v of
+                Break -> error $ "Illegal break statement in function"
+                Return r -> return r
+                _ -> return Nil
+
+        -- global 'static' functions
+        GlobalVar -> do 
+            case name of
+                VarRef (Id fName) -> do
+                    -- get first param
+                    Array vals <- evalExpr env (head params)
+                    case fName of
+                        "head" ->
+                            -- if null, then the function has only one parameter
+                            -- if not null, it has more 
+                            if (null (tail params)) then
+                                return (head vals)
+                            else
+                                error $ "Too many arguments"
+                        "tail" -> 
+                            if (null (tail params)) then
+                                return (Array (tail vals))
+                            else
+                                error $ "Too many arguments"
+                        "len" -> 
+                            if (null (tail params)) then
+                                arraySize (Array vals) (Int 0)
+                            else
+                                error $ "Too many arguments"
+                        "concat" -> do
+                            -- if null, it has only one parameter
+                            if (null (tail params)) then
+                                error $ "Too few arguments"
+                            else do
+                                Array valsToConcat <- evalExpr env (head (tail params))
+                                -- if null, the function has two parameters
+                                -- if not null, it has more
+                                if (null (tail (tail params))) then
+                                    return (Array (vals ++ valsToConcat))
+                                else
+                                    error $ "Too many arguments"
+                        _ -> error $ show fName ++ " is not a global function"
+                _ -> error $ show name ++ " is not a global function"
+        _ -> error $ show name ++ " is not a Variable"    
+    
 
 
 -- Access array item using brackets
@@ -84,10 +101,11 @@ evalExpr env (BracketRef expr idExpr) = do
         Array array -> do
             id <- evalExpr env idExpr
             case id of
-                Int index -> getArrayByIndex env (Array array) (Int index)
+                Int index -> getPositionArray env (Array array) (Int index)
                 _ -> error $ "Illegal argument type"
         -- TODO: implement access to object properties
         _ -> error $ "Illegal type"
+
 
 -----------------------------------------------------------------------------------
 
@@ -159,6 +177,8 @@ evalStmt env (BlockStmt (stmt:stmts)) = do
     v <- evalStmt env stmt
     case v of
         Break -> return Break
+        Return r -> return (Return r)
+        NReturn -> return NReturn
         _ -> evalStmt env (BlockStmt stmts)
 -------------------------------------------------------------------------------------
 -- IF
@@ -183,6 +203,15 @@ evalStmt env (IfStmt expr ifStmt elseStmt) = do
 -- BREAK
 evalStmt env (BreakStmt m) = return Break
 -------------------------------------------------------------------------------------
+-- FUNC
+evalStmt env (FunctionStmt (Id name) args stmts) = createGlobalVar name (Function (Id name) args stmts)
+-- RETURN 
+evalStmt env (ReturnStmt rexpr) =
+    case rexpr of
+        Nothing -> return NReturn
+        Just val -> do
+            v <- evalExpr env val
+            return (Return v)
 
 -- Do not touch this one :)
 evaluate :: StateT -> [Statement] -> StateTransformer Value
@@ -242,16 +271,16 @@ assignOp env OpAssignBOr v1 v2 = infixOp env OpBOr v1 v2
 
 --
 
-getArrayByIndex :: StateT -> Value -> Value -> StateTransformer Value
-getArrayByIndex env (Array []) (Int _) = error $ "Array index out of bounds"
-getArrayByIndex env (Array (x:xs)) (Int index) =
+getPositionArray :: StateT -> Value -> Value -> StateTransformer Value
+getPositionArray env (Array []) (Int _) = error $ "Array index out of bounds"
+getPositionArray env (Array (x:xs)) (Int index) =
     if index < 0 then 
         error $ "Negative index"
     else 
         if index == 0 then
             return x
         else
-            getArrayByIndex env (Array xs) (Int (index-1))
+            getPositionArray env (Array xs) (Int (index-1))
 
 arraySize :: Value -> Value -> StateTransformer Value
 arraySize (Array []) (Int len) = return $ Int $ len
@@ -260,26 +289,42 @@ arraySize (Array (x:xs)) (Int len) = arraySize (Array xs) (Int (len+1))
 -- Environment and auxiliary functions
 --
 
-environment :: Map String Value
-environment = Map.empty
+environment :: [Map String Value]
+environment = [empty]
 
 stateLookup :: StateT -> String -> StateTransformer Value
 stateLookup env var = ST $ \s ->
-    -- this way the error won't be skipped by lazy evaluation
-    case Map.lookup var (union s env) of
-        Nothing -> error $ "Variable " ++ show var ++ " not defiend."
+    case scopeLookup s var of
+        Nothing -> (GlobalVar, s)
         Just val -> (val, s)
+
+scopeLookup :: [Map String Value] -> String -> Maybe Value
+scopeLookup [] _ = Nothing
+scopeLookup (s:scopes) var =
+    case Map.lookup var s of
+        Nothing -> scopeLookup scopes var
+        Just val -> Just val
 
 varDecl :: StateT -> VarDecl -> StateTransformer Value
 varDecl env (VarDecl (Id id) maybeExpr) = do
     case maybeExpr of
-        Nothing -> setVar id Nil
+        Nothing -> createLocalVar id Nil
         (Just expr) -> do
             val <- evalExpr env expr
-            setVar id val
+            createLocalVar  id val
 
+createLocalVar :: String -> Value -> StateTransformer Value
+createLocalVar var val = ST $ \s -> (val, (insert var val (head s)):(tail s))
+
+-- Modified to set a var in the top scope
 setVar :: String -> Value -> StateTransformer Value
-setVar var val = ST $ \s -> (val, insert var val s)
+setVar var val = ST $ \s -> (val, (updateVar var val s))
+
+updateVar :: String -> Value -> StateT -> StateT
+updateVar _ _ [] = error $ "Unreachable error"
+updateVar var val stt = case (Map.lookup var (head stt)) of
+        Nothing -> (head stt):(updateVar var val (tail stt))
+        Just v -> (insert var val (head stt)):(tail stt)
 
 stringResult :: Expression -> String
 stringResult ex = show ex
@@ -288,7 +333,8 @@ stringResult ex = show ex
 -- Types and boilerplate
 --
 
-type StateT = Map String Value
+type StateT = [Map String Value]
+
 data StateTransformer t = ST (StateT -> (t, StateT))
 
 instance Monad StateTransformer where
@@ -310,15 +356,33 @@ instance Applicative StateTransformer where
 --
 
 showResult :: (Value, StateT) -> String
+showResult (val, []) = ""
 showResult (val, defs) =
-    show val ++ "\n" ++ show (toList $ union defs environment) ++ "\n"
+    show val ++ "\n" ++ show (toList $ union (head defs) (head environment)) ++ "\n" ++ showResult (val, tail(defs))
 
 getResult :: StateTransformer Value -> (Value, StateT)
-getResult (ST f) = f Map.empty
+getResult (ST f) = f [empty]
 
 main :: IO ()
 main = do
-    js <- Parser.parseFromFile "Main.js"
+    js <- Parser.parseFromFile "ex5.js"
     let statements = unJavaScript js
     putStrLn $ "AST: " ++ (show $ statements) ++ "\n"
     putStr $ showResult $ getResult $ evaluate environment statements
+
+-- Scopes
+
+createGlobalVar :: String -> Value -> StateTransformer Value
+createGlobalVar var val = ST $ \s -> (val, createGlobalVarTail var val s)
+
+createGlobalVarTail :: String -> Value -> StateT -> StateT
+createGlobalVarTail var val stt = if null (tail stt) then (insert var val (head stt)):[] else (head stt):(createGlobalVarTail var val (tail stt))
+
+
+createArgs :: StateT -> [Id] -> [Expression] -> StateTransformer Value
+createArgs env [] [] = return Nil
+createArgs env ((Id arg):xs) (param:ys) = do
+    v <- evalExpr env param
+    createLocalVar arg v
+    createArgs env xs ys
+createArgs env _ _ = error $ "Invalid amount of parameters"
