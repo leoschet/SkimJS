@@ -365,7 +365,7 @@ getResult (ST f) = f [empty]
 
 main :: IO ()
 main = do
-    js <- Parser.parseFromFile "Main.js"
+    js <- Parser.parseFromFile "ex5.js"
     let statements = unJavaScript js
     putStrLn $ "AST: " ++ (show $ statements) ++ "\n"
     putStr $ showResult $ getResult $ evaluate environment statements
